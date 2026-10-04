@@ -5,6 +5,9 @@ from typing import Any
 from backend.bean.subtitle_area import SubtitleArea
 
 
+DEFAULT_ROI_PADDING = 10
+
+
 class SubtitleROI:
     """A reusable padded crop and coordinate transform for one video's frames."""
 
@@ -12,7 +15,7 @@ class SubtitleROI:
         self,
         frame_shape: Sequence[int],
         selection: SubtitleArea,
-        padding: int = 0,
+        padding: int = DEFAULT_ROI_PADDING,
     ) -> None:
         if len(frame_shape) < 2:
             raise ValueError("frame_shape must include height and width")

@@ -32,11 +32,19 @@ class SubtitleArea:
         self.ab_section = ab_section
         self.roi = None
 
-    def initialize_roi(self, frame_shape: Sequence[int], padding: int = 0) -> SubtitleROI:
+    def initialize_roi(
+        self,
+        frame_shape: Sequence[int],
+        padding: int | None = None,
+    ) -> SubtitleROI:
         """Create this area's reusable ROI after the video frame size is known."""
-        from backend.tools.roi import SubtitleROI
+        from backend.tools.roi import DEFAULT_ROI_PADDING, SubtitleROI
 
-        self.roi = SubtitleROI(frame_shape, self, padding)
+        self.roi = SubtitleROI(
+            frame_shape,
+            self,
+            DEFAULT_ROI_PADDING if padding is None else padding,
+        )
         return self.roi
 
     def normalized(self):
