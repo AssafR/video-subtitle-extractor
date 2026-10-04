@@ -365,3 +365,6 @@ $RECYCLE.BIN/
 /.claude/
 /installer_output/
 /entitlements.plist
+
+
+uv.lock
