@@ -11,7 +11,7 @@ dependencies = [
     "opencv-python~=4.11",
     "onnxruntime-gpu==1.20.1",
     "paddleocr~=3.4.0",
-    # "paddleocr-hebrew",
+    "paddleocr-hebrew",
     "paddlepaddle-gpu>=3.3,<4.dev0",
     "pillow==10.4.0",
     "pyclipper~=1.3",

@@ -111,3 +111,10 @@ tr.read(TRANSLATION_FILE, encoding='utf-8')
 BASE_DIR = str(Path(os.path.abspath(__file__)).parent)
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
+# Paddle (cu118) locates cuDNN/cuBLAS via PATH; expose the pip-installed nvidia-* DLLs.
+if os.name == 'nt':
+    import sysconfig
+    _nvidia_root = Path(sysconfig.get_paths()["purelib"]) / "nvidia"
+    for _bin in _nvidia_root.glob("*/bin"):
+        os.environ["PATH"] = str(_bin) + os.pathsep + os.environ.get("PATH", "")

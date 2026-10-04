@@ -28,7 +28,7 @@ class PaddleModelConfig:
             'sw', 'tl', 'tr', 'uz', 'vi', 'latin', 'german', 'french',
             'fi', 'eu', 'gl', 'lb', 'rm', 'ca', 'qu',
         ]
-        self.ARABIC_LANG = ['ar', 'fa', 'ug', 'ur', 'ps', 'sd', 'bal']
+        self.ARABIC_LANG = ['ar', 'fa', 'ug', 'ur', 'ps', 'sd', 'bal', 'he']
         self.CYRILLIC_LANG = [
             'ru', 'rs_cyrillic', 'be', 'bg', 'uk', 'mn', 'abq', 'ady', 'kbd', 'ava',
             'dar', 'inh', 'che', 'lbe', 'lez', 'tab', 'cyrillic',

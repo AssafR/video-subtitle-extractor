@@ -2,15 +2,73 @@ import os
 from backend.config import *
 import importlib
 from paddleocr import PaddleOCR
+from paddleocr_hebrew import HebrewOCR
+
 from backend.tools.hardware_accelerator import HardwareAccelerator
 from backend.tools.paddle_model_config import PaddleModelConfig
+
+class HebrewOCRPaddleAdapter:
+    """
+    Adapts paddleocr-hebrew output to the subset of PaddleOCR's interface
+    consumed by OcrRecogniser.predict().
+    """
+
+    def __init__(self, models_dir, providers):
+        try:
+            from paddleocr_hebrew import HebrewOCR
+        except ImportError as exc:
+            raise RuntimeError(
+                "Hebrew OCR is selected, but paddleocr-hebrew is not installed."
+            ) from exc
+
+        self.ocr = HebrewOCR.word(
+            models_dir=models_dir,
+            providers=providers,
+        )
+
+    def predict_iter(self, image):
+        result = self.ocr.read_array(image)
+
+        dt_polys = []
+        rec_texts = []
+        rec_scores = []
+
+        # Use complete lines rather than individual words. The Hebrew package
+        # has already assembled each line in logical RTL Unicode order.
+        for line in result.get("lines", []):
+            text = str(line.get("text", "")).strip()
+            bbox = line.get("bbox")
+
+            if not text or not bbox or len(bbox) != 4:
+                continue
+
+            xmin, ymin, xmax, ymax = map(int, bbox)
+
+            dt_polys.append([
+                [xmin, ymin],
+                [xmax, ymin],
+                [xmax, ymax],
+                [xmin, ymax],
+            ])
+            rec_texts.append(text)
+
+            # paddleocr-hebrew currently does not expose a line confidence.
+            # A value of 1.0 prevents VSE's PaddleOCR confidence filter from
+            # rejecting otherwise valid Hebrew results.
+            rec_scores.append(1.0)
+
+        yield {
+            "dt_polys": dt_polys,
+            "rec_texts": rec_texts,
+            "rec_scores": rec_scores,
+        }
+
 
 # 加载文本检测+识别模型
 class OcrRecogniser:
     def __init__(self):
         self.recogniser = None
-        # 占位，应该由main.py初始化
-        self.hardware_accelerator = HardwareAccelerator()
+        self.hardware_accelerator = HardwareAccelerator.instance()
 
     @staticmethod
     def y_round(y):
@@ -83,27 +141,60 @@ class OcrRecogniser:
         return sorted_dt_box, sorted_rec_res
 
     def init_model(self):
+        language = str(config.language.value).strip().lower()
+
+        if language in {"he", "hebrew", "עברית"}:
+            models_dir = os.environ.get(
+                "VSE_HEBREW_MODELS_DIR",
+                os.path.join(BASE_DIR, "models", "hebrew"),
+            )
+
+            if not os.path.isdir(models_dir):
+                raise RuntimeError(
+                    "Hebrew OCR models were not found. "
+                    f"Expected them at: {models_dir}. "
+                    "Set VSE_HEBREW_MODELS_DIR to the downloaded model directory."
+                )
+
+            providers = (
+                ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if self.hardware_accelerator.has_cuda()
+                else ["CPUExecutionProvider"]
+            )
+
+            return HebrewOCRPaddleAdapter(
+                models_dir=models_dir,
+                providers=providers,
+            )
+
+        # Existing PaddleOCR path for every other language.
         model_config = PaddleModelConfig(self.hardware_accelerator)
 
-        # PaddleOCR 3.x 使用 device 参数替代 use_gpu
+        # PaddleOCR 3.x uses `device` instead of `use_gpu`.
         if self.hardware_accelerator.has_cuda():
-            device = 'gpu:0'
+            device = "gpu:0"
         else:
-            device = 'cpu'
+            device = "cpu"
 
-        kwargs = dict(
-            text_detection_model_dir=model_config.DET_MODEL_PATH,
-            text_recognition_model_dir=model_config.REC_MODEL_PATH,
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
-            text_rec_score_thresh=0,
-            device=device,
-        )
+        kwargs = {
+            "text_detection_model_dir": model_config.DET_MODEL_PATH,
+            "text_recognition_model_dir": model_config.REC_MODEL_PATH,
+            "use_doc_orientation_classify": False,
+            "use_doc_unwarping": False,
+            "use_textline_orientation": False,
+            "text_rec_score_thresh": 0,
+            "device": device,
+        }
+
         if model_config.DET_MODEL_NAME:
-            kwargs['text_detection_model_name'] = model_config.DET_MODEL_NAME
+            kwargs["text_detection_model_name"] = (
+                model_config.DET_MODEL_NAME
+            )
+
         if model_config.REC_MODEL_NAME:
-            kwargs['text_recognition_model_name'] = model_config.REC_MODEL_NAME
+            kwargs["text_recognition_model_name"] = (
+                model_config.REC_MODEL_NAME
+            )
 
         return PaddleOCR(**kwargs)
 
