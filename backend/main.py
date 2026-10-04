@@ -108,6 +108,8 @@ class SubtitleExtractor:
         # 记录开始运行的时间
         start_time = time.time()
         self.lock.acquire()
+        if self.sub_area is not None:
+            self.sub_area.initialize_roi((self.frame_height, self.frame_width))
         # 重置进度条
         self.update_progress(ocr=0, frame_extract=0, post=0)
         self.append_output('-----------------------------')
