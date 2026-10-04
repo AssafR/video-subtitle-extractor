@@ -3,66 +3,9 @@ from backend.config import *
 import importlib
 import backend.tools.quiet_paddle  # noqa: F401  must precede paddleocr
 from paddleocr import PaddleOCR
-from paddleocr_hebrew import HebrewOCR
-
 from backend.tools.hardware_accelerator import HardwareAccelerator
+from backend.tools.hebrew_ocr import HebrewOCRPaddleAdapter, is_hebrew_language
 from backend.tools.paddle_model_config import PaddleModelConfig
-
-class HebrewOCRPaddleAdapter:
-    """
-    Adapts paddleocr-hebrew output to the subset of PaddleOCR's interface
-    consumed by OcrRecogniser.predict().
-    """
-
-    def __init__(self, models_dir, providers):
-        try:
-            from paddleocr_hebrew import HebrewOCR
-        except ImportError as exc:
-            raise RuntimeError(
-                "Hebrew OCR is selected, but paddleocr-hebrew is not installed."
-            ) from exc
-
-        self.ocr = HebrewOCR.word(
-            models_dir=models_dir,
-            providers=providers,
-        )
-
-    def predict_iter(self, image):
-        result = self.ocr.read_array(image)
-
-        dt_polys = []
-        rec_texts = []
-        rec_scores = []
-
-        # Use complete lines rather than individual words. The Hebrew package
-        # has already assembled each line in logical RTL Unicode order.
-        for line in result.get("lines", []):
-            text = str(line.get("text", "")).strip()
-            bbox = line.get("bbox")
-
-            if not text or not bbox or len(bbox) != 4:
-                continue
-
-            xmin, ymin, xmax, ymax = map(int, bbox)
-
-            dt_polys.append([
-                [xmin, ymin],
-                [xmax, ymin],
-                [xmax, ymax],
-                [xmin, ymax],
-            ])
-            rec_texts.append(text)
-
-            # paddleocr-hebrew currently does not expose a line confidence.
-            # A value of 1.0 prevents VSE's PaddleOCR confidence filter from
-            # rejecting otherwise valid Hebrew results.
-            rec_scores.append(1.0)
-
-        yield {
-            "dt_polys": dt_polys,
-            "rec_texts": rec_texts,
-            "rec_scores": rec_scores,
-        }
 
 
 # 加载文本检测+识别模型
@@ -146,31 +89,8 @@ class OcrRecogniser:
         return sorted_dt_box, sorted_rec_res
 
     def init_model(self):
-        language = str(config.language.value).strip().lower()
-
-        if language in {"he", "hebrew", "עברית"}:
-            models_dir = os.environ.get(
-                "VSE_HEBREW_MODELS_DIR",
-                os.path.join(BASE_DIR, "models", "hebrew"),
-            )
-
-            if not os.path.isdir(models_dir):
-                raise RuntimeError(
-                    "Hebrew OCR models were not found. "
-                    f"Expected them at: {models_dir}. "
-                    "Set VSE_HEBREW_MODELS_DIR to the downloaded model directory."
-                )
-
-            providers = (
-                ["CUDAExecutionProvider", "CPUExecutionProvider"]
-                if self.hardware_accelerator.has_cuda()
-                else ["CPUExecutionProvider"]
-            )
-
-            return HebrewOCRPaddleAdapter(
-                models_dir=models_dir,
-                providers=providers,
-            )
+        if is_hebrew_language(config.language.value):
+            return HebrewOCRPaddleAdapter.create(self.hardware_accelerator)
 
         # Existing PaddleOCR path for every other language.
         model_config = PaddleModelConfig(self.hardware_accelerator)
